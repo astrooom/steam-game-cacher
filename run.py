@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DOCKER_IMAGE = "steamcmd/steamcmd:latest"
+NODE_NAME = os.getenv("NODE_NAME", "unknown") # Only used for slack notifs.
 slack_channel = os.getenv("SLACK_BOT_CHANNEL")
 slack_token = os.getenv("SLACK_BOT_TOKEN")
 ENABLE_SLACK = slack_channel and slack_token
@@ -28,6 +29,7 @@ def send_slack_message(app_id: str, error_str: str):
     text = f"""
     *Failed Steam Game Caching*
     *Details:*
+    • *Node Name:* `{NODE_NAME}`
     • *Steam App ID:* `{app_id}`
     • *Error:* `{error_str}`
     """
