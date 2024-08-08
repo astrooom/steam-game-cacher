@@ -4,6 +4,7 @@ import argparse
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
+import sys
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -187,6 +188,17 @@ def main(app_ids, install_path, max_workers):
                 print(f"Error during installation/update of {app_id}: {e}")
 
 if __name__ == "__main__":
+    
+    lockfile = "./lockfile"
+    
+    ## Check if lockfile exists
+    if os.path.exists(lockfile):
+        print("Steam game updater is already running. Please wait for it to complete or delete the lockfile. Exiting...")
+        sys.exit(1)
+    
+    ## Create lockfile
+    open(lockfile, "w").close()
+    
     parser = argparse.ArgumentParser(description="Install or update Steam games using SteamCMD")
     parser.add_argument('--app_ids', type=str, required=True, help='Comma-separated list of Steam APP_IDs')
     parser.add_argument('--install_path', type=str, required=True, help='Path to install the games')
@@ -195,3 +207,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     app_ids = args.app_ids.split(',')
     main(app_ids, args.install_path, args.max_workers)
+    
+    
+    # Remove lockfile
+    os.remove(lockfile)
