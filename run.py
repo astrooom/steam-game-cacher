@@ -4,8 +4,14 @@ import argparse
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
+from dotenv import load_dotenv
+
+load_dotenv()
 
 DOCKER_IMAGE = "steamcmd/steamcmd:latest"
+slack_channel = os.getenv("SLACK_BOT_CHANNEL")
+slack_token = os.getenv("SLACK_BOT_TOKEN")
+ENABLE_SLACK = slack_channel and slack_token
 
 
 def setup_logging():
@@ -16,26 +22,21 @@ def setup_logging():
         format='%(asctime)s - %(levelname)s - %(message)s',
     )
 
-def send_slack_message(APP_ID: str, Error: str):
-    channel = os.getenv("SLACK_BOT_CHANNEL")
-    token = os.getenv("SLACK_BOT_TOKEN")
-
-    if not channel or not token:
-        return
+def send_slack_message(app_id: str, error_str: str):
 
     text = f"""
-    *Failed Game Caching*
+    *Failed Steam Game Caching*
     *Details:*
-    • *APP_ID:* `{APP_ID}`
-    • *Error:* `{Error}`
+    • *Steam App ID:* `{app_id}`
+    • *Error:* `{error_str}`
     """
 
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {token}",
+        "Authorization": f"Bearer {slack_token}",
     }
     payload = {
-        "channel": channel,
+        "channel": slack_channel,
         "attachments": [
             {
                 "color": "#FF0000",
@@ -68,6 +69,7 @@ def pull_steamcmd():
         result = subprocess.run(pull_command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         logging.info(f"SteamCMD updated successfully. Output: {result.stdout.decode()}")
     except subprocess.CalledProcessError as e:
+        send_slack_message("Failed to update SteamCMD", str(e))
         logging.error(f"Failed to update SteamCMD: {e}. Error output: {e.stderr.decode()}")
         raise
 
@@ -99,6 +101,7 @@ def pull_steamcmd():
                 subprocess.run(remove_container_command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 logging.info(f"Removed old SteamCMD container with ID: {container_id}")
     except subprocess.CalledProcessError as e:
+        send_slack_message("Failed to remove old SteamCMD containers", str(e))
         logging.error(f"Failed to remove old SteamCMD containers: {e}. Error output: {e.stderr.decode()}")
         raise
 
@@ -128,6 +131,7 @@ def pull_steamcmd():
                 subprocess.run(remove_image_command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 logging.info(f"Removed old SteamCMD image with ID: {image_id}")
     except subprocess.CalledProcessError as e:
+        send_slack_message("Failed to remove old SteamCMD images", str(e))
         logging.error(f"Failed to remove old SteamCMD images: {e}. Error output: {e.stderr.decode()}")
         raise
     
@@ -136,7 +140,10 @@ def install_or_update_game(app_id, install_path):
     
     install_dir = os.path.join(install_path, app_id)
     
-    os.makedirs(install_dir, exist_ok=True)
+    logging.info(f"Installing/Updating {app_id} to {install_dir}...")
+    
+    #os.makedirs(install_dir, exist_ok=True)
+    
     command = [
         'docker', 'run', '-it',
         '-v', f'{install_dir}:{install_dir}',
@@ -146,12 +153,12 @@ def install_or_update_game(app_id, install_path):
         '+app_update', app_id, 'validate', 
         '+quit'
     ]
+    
     try:
         result = subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         logging.info(f"Successfully updated/installed {app_id}. Output: {result.stdout.decode()}")
     except subprocess.CalledProcessError as e:
         logging.error(f"Failed to update/install {app_id}: {e}. Error output: {e.stderr.decode()}")
-        send_slack_message(app_id, e.stderr.decode())
         raise
 
 def main(app_ids, install_path, max_workers):
@@ -176,7 +183,8 @@ def main(app_ids, install_path, max_workers):
                 print(f"Successfully updated/installed {app_id}")
             except Exception as e:
                 logging.error(f"Error during installation/update of {app_id}: {e}")
-                print(f"Failed to update/install {app_id}: {e}")
+                send_slack_message(f"Error during installation/update of {app_id}", str(e))
+                print(f"Error during installation/update of {app_id}: {e}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Install or update Steam games using SteamCMD")
