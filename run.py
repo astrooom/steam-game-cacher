@@ -5,6 +5,8 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 
+DOCKER_IMAGE = "steamcmd/steamcmd:latest"
+
 
 def setup_logging():
     log_file = os.path.join(os.path.dirname(__file__), 'steamcmd.log')
@@ -49,22 +51,98 @@ def send_slack_message(APP_ID: str, Error: str):
         print(f"Slack  Command Notifier: Error sending message - {error}")
 
 
-def update_steamcmd():
+def pull_steamcmd():
+    """
+    Pulls the latest SteamCMD image and makes sure that the old images and their associated volumes are removed.
+    """
     logging.info("Updating SteamCMD...")
-    command = ['steamcmd', '+login', 'anonymous', '+quit']
+
+    # Pull the latest SteamCMD image
+    pull_command = [
+        'docker',
+        'pull',
+        'steamcmd/steamcmd:latest',
+    ]
+
     try:
-        result = subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result = subprocess.run(pull_command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         logging.info(f"SteamCMD updated successfully. Output: {result.stdout.decode()}")
     except subprocess.CalledProcessError as e:
         logging.error(f"Failed to update SteamCMD: {e}. Error output: {e.stderr.decode()}")
         raise
 
+    # Check and remove old containers using steamcmd/steamcmd image
+    logging.info("Removing old SteamCMD containers...")
+
+    try:
+        # Get all container IDs for containers using steamcmd/steamcmd
+        list_containers_command = [
+            'docker',
+            'ps',
+            '-a',
+            '-q',
+            '--filter',
+            'ancestor=steamcmd/steamcmd'
+        ]
+        containers_result = subprocess.run(list_containers_command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        container_ids = containers_result.stdout.decode().strip().split('\n')
+
+        # Remove each container and associated volumes
+        for container_id in container_ids:
+            if container_id:
+                remove_container_command = [
+                    'docker',
+                    'rm',
+                    '-v',
+                    container_id
+                ]
+                subprocess.run(remove_container_command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                logging.info(f"Removed old SteamCMD container with ID: {container_id}")
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Failed to remove old SteamCMD containers: {e}. Error output: {e.stderr.decode()}")
+        raise
+
+    # Check and remove old steamcmd/steamcmd images
+    logging.info("Removing old SteamCMD images...")
+
+    try:
+        # Get all image IDs for steamcmd/steamcmd
+        list_images_command = [
+            'docker',
+            'images',
+            '-q',
+            'steamcmd/steamcmd'
+        ]
+        images_result = subprocess.run(list_images_command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        image_ids = images_result.stdout.decode().strip().split('\n')
+
+        # Remove each image
+        for image_id in image_ids:
+            if image_id:
+                remove_image_command = [
+                    'docker',
+                    'rmi',
+                    '-f',
+                    image_id
+                ]
+                subprocess.run(remove_image_command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                logging.info(f"Removed old SteamCMD image with ID: {image_id}")
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Failed to remove old SteamCMD images: {e}. Error output: {e.stderr.decode()}")
+        raise
+    
+
 def install_or_update_game(app_id, install_path):
+    
     install_dir = os.path.join(install_path, app_id)
+    
     os.makedirs(install_dir, exist_ok=True)
     command = [
-        'steamcmd', '+login', 'anonymous', 
+        'docker', 'run', '-it',
+        '-v', f'{install_dir}:{install_dir}',
+        DOCKER_IMAGE,
         '+force_install_dir', install_dir, 
+        '+login', 'anonymous', 
         '+app_update', app_id, 'validate', 
         '+quit'
     ]
@@ -78,11 +156,11 @@ def install_or_update_game(app_id, install_path):
 
 def main(app_ids, install_path, max_workers):
     setup_logging()
-    logging.info("Starting the Steam game updater...")
+    logging.info(f"Starting the Steam game updater with App IDs {app_ids}")
     
     logging.info(f"Checking for latest SteamCMD version...")
     try:
-        update_steamcmd()
+        pull_steamcmd()
     except Exception as e:
         logging.error(f"Error during SteamCMD update: {e}")
         print(f"Error during SteamCMD update: {e}")
@@ -104,7 +182,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Install or update Steam games using SteamCMD")
     parser.add_argument('--app_ids', type=str, required=True, help='Comma-separated list of Steam APP_IDs')
     parser.add_argument('--install_path', type=str, required=True, help='Path to install the games')
-    parser.add_argument('--max_workers', type=int, default=2, help='Maximum number of concurrent workers to download and install games')
+    parser.add_argument('--max_workers', type=int, default=2, help='Maximum number of concurrent APP IDs to process')
 
     args = parser.parse_args()
     app_ids = args.app_ids.split(',')

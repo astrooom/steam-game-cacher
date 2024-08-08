@@ -1,5 +1,3 @@
 # Requirements
 
-Install SteamCMD
-
-https://developer.valvesoftware.com/wiki/SteamCMD#Linux
+Docker. That't is :P
