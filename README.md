@@ -34,7 +34,7 @@ Whether the SteamCMD docker container should run in interactive mode or not. If 
 
 # Optional Slack Notifications
 
-If you want, you can configure Slack to notify if the script fails to a set channel.
+If you want, you can configure Slack to notify if the script errors.
 
 Check these environment variables in the .env
 
