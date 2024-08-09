@@ -1,3 +1,7 @@
+# Steam Game Cacher
+
+This script is intended to keep the files of steam games as well as their dedicated server counterparts cached locally. The script can be run as a cron (without any overlap due to lockfile) to make sure that regular check-ups occur to grab the latest versions of each game.
+
 # Requirements
 
 The script can run anywhere Docker and Python can run.
