@@ -1,7 +1,18 @@
 # Requirements
 
+The script can run anywhere Docker and Python can run.
+
 - Docker
 - Python 3.6 >
+- Pip
+
+```
+apt-get install python3 python3-pip
+
+pip3 install requests --break-system-packages
+```
+
+(Debian/Ubuntu)
 
 # Usage
 
