@@ -59,7 +59,7 @@ def send_slack_message(app_id: str, error_str: str):
 
 def pull_steamcmd():
     """
-    Pulls the latest SteamCMD image and makes sure that the old images and their associated volumes are removed.
+    Pulls the latest SteamCMD image and removes unused Docker images.
     """
     logging.info("Updating SteamCMD...")
 
@@ -81,69 +81,28 @@ def pull_steamcmd():
             f"Failed to update SteamCMD: {e}. Error output: {e.stderr.decode()}")
         raise
 
-    # Check and remove old containers using steamcmd/steamcmd image
-    logging.info("Removing old SteamCMD containers...")
-
+    # List all image IDs for steamcmd/steamcmd
     try:
-        # Get all container IDs for containers using steamcmd/steamcmd
-        list_containers_command = [
-            'docker',
-            'ps',
-            '-a',
-            '-q',
-            '--filter',
-            'ancestor=steamcmd/steamcmd'
-        ]
-        containers_result = subprocess.run(
-            list_containers_command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        container_ids = containers_result.stdout.decode().strip().split('\n')
-
-        # Remove each container and associated volumes
-        for container_id in container_ids:
-            if container_id:
-                remove_container_command = [
-                    'docker',
-                    'rm',
-                    '-v',
-                    container_id
-                ]
-                subprocess.run(remove_container_command, check=True,
-                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                logging.info(
-                    f"Removed old SteamCMD container with ID: {container_id}")
-    except subprocess.CalledProcessError as e:
-        send_slack_message("Failed to remove old SteamCMD containers", str(e))
-        logging.error(
-            f"Failed to remove old SteamCMD containers: {e}. Error output: {e.stderr.decode()}")
-        raise
-
-    # Check and remove old steamcmd/steamcmd images
-    logging.info("Removing old SteamCMD images...")
-
-    try:
-        # Get all image IDs for steamcmd/steamcmd
         list_images_command = [
-            'docker',
-            'images',
-            '-q',
-            'steamcmd/steamcmd'
+            'docker', 'images', '-q', 'steamcmd/steamcmd'
         ]
         images_result = subprocess.run(
             list_images_command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         image_ids = images_result.stdout.decode().strip().split('\n')
 
-        # Remove each image
-        for image_id in image_ids:
-            if image_id:
-                remove_image_command = [
-                    'docker',
-                    'rmi',
-                    '-f',
-                    image_id
-                ]
-                subprocess.run(remove_image_command, check=True,
-                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                logging.info(f"Removed old SteamCMD image with ID: {image_id}")
+        # Keep the most recent image and remove the others
+        if image_ids:
+            # The latest pulled image should be the first in the list
+            latest_image_id = image_ids[0]
+            for image_id in image_ids[1:]:  # Start from the second item
+                if image_id and image_id != latest_image_id:
+                    remove_image_command = [
+                        'docker', 'rmi', '-f', image_id
+                    ]
+                    subprocess.run(remove_image_command, check=True,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    logging.info(
+                        f"Removed old SteamCMD image with ID: {image_id}")
     except subprocess.CalledProcessError as e:
         send_slack_message("Failed to remove old SteamCMD images", str(e))
         logging.error(
