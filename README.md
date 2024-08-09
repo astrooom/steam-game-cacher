@@ -9,7 +9,7 @@ The script can run anywhere Docker and Python can run.
 ```
 apt-get install python3 python3-pip
 
-pip3 install requests --break-system-packages
+pip3 install requests python-dotenv --break-system-packages
 ```
 
 (Debian/Ubuntu)
