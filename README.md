@@ -1,6 +1,7 @@
 # Requirements
 
-Docker. That't is :P
+- Docker
+- Python 3.6 >
 
 # Usage
 
