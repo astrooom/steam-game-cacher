@@ -2,6 +2,8 @@
 
 This script is intended to keep the files of steam games as well as their dedicated server counterparts cached locally. The script can be run as a cron (without any overlap due to lockfile) to make sure that regular check-ups occur to grab the latest versions of each game.
 
+The games can then be copied over to wherever you want them to run. An example use-case is for game servers on [Pterodactyl Panel](https://github.com/pterodactyl/panel), where you want to make installing Steam games quicker by maintaining a copy of all the game files locally which you can then copy to new servers during their (egg) insallation process.
+
 # Requirements
 
 The script can run anywhere Docker and Python can run.
