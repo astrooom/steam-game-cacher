@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DOCKER_IMAGE = "steamcmd/steamcmd:latest"
+DOCKER_IMAGE = os.getenv("STEAMCMD_DOCKER_IMAGE", "steamcmd-bandwidth:latest")
 NODE_NAME = os.getenv("NODE_NAME", "unknown")  # Only used for slack notifs.
 slack_channel = os.getenv("SLACK_BOT_CHANNEL")
 slack_token = os.getenv("SLACK_BOT_TOKEN")
@@ -59,109 +59,64 @@ def send_slack_message(app_id: str, error_str: str):
 
 def pull_steamcmd():
     """
-    Pulls the latest SteamCMD image and makes sure that the old images and their associated volumes are removed.
+    Pulls the configured Docker image if it's a remote image, skips if it's a local image.
     """
-    logging.info("Updating SteamCMD...")
+    logging.info(f"Checking Docker image: {DOCKER_IMAGE}...")
 
-    # Pull the latest SteamCMD image
+    # Skip pulling for local images (they don't exist in remote registries)
+    if not '/' in DOCKER_IMAGE or DOCKER_IMAGE.startswith('steamcmd-bandwidth'):
+        logging.info(f"Skipping pull for local image: {DOCKER_IMAGE}")
+        return
+
+    # Pull the configured Docker image (only for remote images)
     pull_command = [
         'docker',
         'pull',
-        'steamcmd/steamcmd:latest',
+        DOCKER_IMAGE,
     ]
 
     try:
         result = subprocess.run(pull_command, check=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         logging.info(
-            f"SteamCMD updated successfully. Output: {result.stdout.decode()}")
+            f"Docker image updated successfully. Output: {result.stdout.decode()}")
     except subprocess.CalledProcessError as e:
         send_slack_message("Failed to update SteamCMD", str(e))
         logging.error(
             f"Failed to update SteamCMD: {e}. Error output: {e.stderr.decode()}")
         raise
 
-    # Check and remove old containers using steamcmd/steamcmd image
-    # logging.info("Removing old SteamCMD containers...")
-
-    # try:
-    #     # Get all container IDs for containers using steamcmd/steamcmd
-    #     list_containers_command = [
-    #         'docker',
-    #         'ps',
-    #         '-a',
-    #         '-q',
-    #         '--filter',
-    #         'ancestor=steamcmd/steamcmd'
-    #     ]
-    #     containers_result = subprocess.run(
-    #         list_containers_command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    #     container_ids = containers_result.stdout.decode().strip().split('\n')
-
-    #     # Remove each container and associated volumes
-    #     for container_id in container_ids:
-    #         if container_id:
-    #             remove_container_command = [
-    #                 'docker',
-    #                 'rm',
-    #                 '-v',
-    #                 container_id
-    #             ]
-    #             subprocess.run(remove_container_command, check=True,
-    #                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    #             logging.info(
-    #                 f"Removed old SteamCMD container with ID: {container_id}")
-    # except subprocess.CalledProcessError as e:
-    #     send_slack_message("Failed to remove old SteamCMD containers", str(e))
-    #     logging.error(
-    #         f"Failed to remove old SteamCMD containers: {e}. Error output: {e.stderr.decode()}")
-    #     raise
-
-    # # Check and remove old steamcmd/steamcmd images
-    # logging.info("Removing old SteamCMD images...")
-
-    # try:
-    #     # Get all image IDs for steamcmd/steamcmd
-    #     list_images_command = [
-    #         'docker',
-    #         'images',
-    #         '-q',
-    #         'steamcmd/steamcmd'
-    #     ]
-    #     images_result = subprocess.run(
-    #         list_images_command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    #     image_ids = images_result.stdout.decode().strip().split('\n')
-
-    #     # Remove each image
-    #     for image_id in image_ids:
-    #         if image_id:
-    #             remove_image_command = [
-    #                 'docker',
-    #                 'rmi',
-    #                 '-f',
-    #                 image_id
-    #             ]
-    #             subprocess.run(remove_image_command, check=True,
-    #                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    #             logging.info(f"Removed old SteamCMD image with ID: {image_id}")
-    # except subprocess.CalledProcessError as e:
-    #     send_slack_message("Failed to remove old SteamCMD images", str(e))
-    #     logging.error(
-    #         f"Failed to remove old SteamCMD images: {e}. Error output: {e.stderr.decode()}")
-    #     raise
-
-
-def install_or_update_game(app_id, install_path, interactive):
+def install_or_update_game(app_id, install_path, interactive, bandwidth_enabled=False, bandwidth_up_rate=None, bandwidth_down_rate=None):
 
     install_dir = os.path.join(install_path, app_id)
 
     logging.info(f"Installing/Updating {app_id} to {install_dir}...")
+    print(f"Using Docker image: {DOCKER_IMAGE}")
+    
+    if bandwidth_enabled:
+        print(f"Bandwidth limiting enabled:")
+        print(f"  - Upload rate: {bandwidth_up_rate or 'unlimited'} KB/s")
+        print(f"  - Download rate: {bandwidth_down_rate or 'unlimited'} KB/s")
+    else:
+        print("Bandwidth limiting disabled")
 
     # os.makedirs(install_dir, exist_ok=True)
 
+    # Build environment variables for bandwidth limiting
+    env_vars = []
+    if bandwidth_enabled:
+        env_vars.extend(['-e', 'BANDWIDTH_ENABLED=true'])
+        if bandwidth_up_rate:
+            env_vars.extend(['-e', f'BANDWIDTH_UP_RATE={bandwidth_up_rate}'])
+        if bandwidth_down_rate:
+            env_vars.extend(['-e', f'BANDWIDTH_DOWN_RATE={bandwidth_down_rate}'])
+
     command = [
         'docker', 'run',
+        '--rm',
         *(["-it"] if interactive else []),
+        *(['--privileged'] if bandwidth_enabled else []),
+        *env_vars,
         '-v', f'{install_dir}:{install_dir}',
         DOCKER_IMAGE,
         '+force_install_dir', install_dir,
@@ -170,18 +125,20 @@ def install_or_update_game(app_id, install_path, interactive):
         '+quit'
     ]
 
+    print(f"Running command: {' '.join(command)}")
+    
     try:
-        result = subprocess.run(command, check=True,
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        logging.info(
-            f"Successfully updated/installed {app_id}. Output: {result.stdout.decode()}")
+        # Run without capturing output so we can see it in real-time
+        result = subprocess.run(command, check=True)
+        logging.info(f"Successfully updated/installed {app_id}")
+        print(f"✅ Successfully completed download/update for app {app_id}")
     except subprocess.CalledProcessError as e:
-        logging.error(
-            f"Failed to update/install {app_id}: {e}. Error output: {e.stderr.decode()}")
+        logging.error(f"Failed to update/install {app_id}: {e}")
+        print(f"❌ Failed to download/update app {app_id}: {e}")
         raise
 
 
-def main(app_ids, install_path, max_workers, interactive):
+def main(app_ids, install_path, max_workers, interactive, bandwidth_enabled=False, bandwidth_up_rate=None, bandwidth_down_rate=None):
     setup_logging()
 
     if interactive:
@@ -189,6 +146,9 @@ def main(app_ids, install_path, max_workers, interactive):
     else:
         logging.info(
             f"Starting the non-interactive Steam game installer with App IDs {app_ids}")
+
+    if bandwidth_enabled:
+        logging.info(f"Bandwidth limiting enabled - Up: {bandwidth_up_rate or 'unlimited'} KB/s, Down: {bandwidth_down_rate or 'unlimited'} KB/s")
 
     logging.info(f"Checking for latest SteamCMD version...")
     try:
@@ -200,7 +160,7 @@ def main(app_ids, install_path, max_workers, interactive):
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {executor.submit(
-            install_or_update_game, app_id, install_path, interactive): app_id for app_id in app_ids}
+            install_or_update_game, app_id, install_path, interactive, bandwidth_enabled, bandwidth_up_rate, bandwidth_down_rate): app_id for app_id in app_ids}
 
         for future in as_completed(futures):
             app_id = futures[future]
@@ -236,12 +196,19 @@ if __name__ == "__main__":
                             required=True, help='Path to install the games')
         parser.add_argument('--max_workers', type=int, default=2,
                             help='Maximum number of concurrent APP IDs to process')
-        parser.add_argument('--interactive', type=lambda x: (str(x).lower() == 'true'), default=True,
+        parser.add_argument('--interactive', type=lambda x: (str(x).lower() == 'true'), default=False,
                             help='Run the SteamCMD docker container in interactive mode (True/False)')
+        parser.add_argument('--bandwidth_enabled', type=lambda x: (str(x).lower() == 'true'), default=False,
+                            help='Enable bandwidth limiting with Traffic Control (True/False)')
+        parser.add_argument('--bandwidth_up_rate', type=int,
+                            help='Upload rate limit in KB/s (requires custom Docker image)')
+        parser.add_argument('--bandwidth_down_rate', type=int,
+                            help='Download rate limit in KB/s (requires custom Docker image)')
         args = parser.parse_args()
         app_ids = args.app_ids.split(',')
 
-        main(app_ids, args.install_path, args.max_workers, args.interactive)
+        main(app_ids, args.install_path, args.max_workers, args.interactive, 
+             args.bandwidth_enabled, args.bandwidth_up_rate, args.bandwidth_down_rate)
     finally:
         # Remove lockfile
         os.remove(lockfile)
