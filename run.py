@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DOCKER_IMAGE = os.getenv("STEAMCMD_DOCKER_IMAGE", "ghcr.io/astrooom/steamcmd-bandwidth:latest")
+DOCKER_IMAGE = os.getenv("STEAMCMD_DOCKER_IMAGE", "astroom/steamcmd-bandwidth:latest")
 NODE_NAME = os.getenv("NODE_NAME", "unknown")  # Only used for slack notifs.
 slack_channel = os.getenv("SLACK_BOT_CHANNEL")
 slack_token = os.getenv("SLACK_BOT_TOKEN")
@@ -63,8 +63,8 @@ def pull_steamcmd():
     """
     logging.info(f"Checking Docker image: {DOCKER_IMAGE}...")
 
-    # Skip pulling for local images only (GHCR images should be pulled)
-    if DOCKER_IMAGE.startswith('steamcmd-bandwidth') and not DOCKER_IMAGE.startswith('ghcr.io'):
+    # Skip pulling for local images only (public registry images should be pulled)
+    if DOCKER_IMAGE.startswith('steamcmd-bandwidth') and '/' not in DOCKER_IMAGE:
         logging.info(f"Skipping pull for local image: {DOCKER_IMAGE}")
         return
 
