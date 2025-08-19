@@ -19,7 +19,7 @@ python3 run.py --app_ids=376030,258550 --install_path=/var/lib/steam_cache
 
 2. Set the environment variable to use the custom image:
 ```bash
-export STEAMCMD_DOCKER_IMAGE=ghcr.io/astrooom/steamcmd-bandwidth:latest
+export STEAMCMD_DOCKER_IMAGE=astroom/steamcmd-bandwidth:latest
 ```
 
 3. Run with bandwidth limiting:
@@ -71,10 +71,16 @@ This project includes a custom Docker image that extends the official SteamCMD i
 ./build-docker.sh
 ```
 
-This creates a Docker image named `ghcr.io/astrooom/steamcmd-bandwidth:latest` that includes:
-- Official SteamCMD base image
-- Traffic Control (TC) bandwidth limiting tools
+This creates a Docker image named `astroom/steamcmd-bandwidth:latest` that includes:
+- Official SteamCMD Debian base image (`steamcmd/steamcmd:debian`)
+- Traffic Control (TC) bandwidth limiting tools (`iproute2`, `iftop`, etc.)
 - Wrapper script for bandwidth-controlled SteamCMD execution
+
+**📦 Pre-built images available on:**
+- **Docker Hub**: `astroom/steamcmd-bandwidth:latest` (recommended)
+- **GitHub Container Registry**: `ghcr.io/astroom/steamcmd-bandwidth:latest`
+
+You can use the pre-built image instead of building locally!
 
 ## Using the Custom Image
 
@@ -82,10 +88,10 @@ Set the `STEAMCMD_DOCKER_IMAGE` environment variable:
 
 ```bash
 # In your shell
-export STEAMCMD_DOCKER_IMAGE=ghcr.io/astrooom/steamcmd-bandwidth:latest
+export STEAMCMD_DOCKER_IMAGE=astroom/steamcmd-bandwidth:latest
 
 # Or in a .env file
-echo "STEAMCMD_DOCKER_IMAGE=ghcr.io/astrooom/steamcmd-bandwidth:latest" >> .env
+echo "STEAMCMD_DOCKER_IMAGE=astroom/steamcmd-bandwidth:latest" >> .env
 ```
 
 ## Bandwidth Limiting Examples
